@@ -68,6 +68,15 @@ details.acc[open]>summary::after{transform:rotate(90deg)}
 .p-row em{font-style:normal;color:var(--sub);font-size:13px;margin-left:4px}
 .p-bmi{padding:10px 0 4px;font-size:13px;color:var(--sub);text-align:center}
 .p-bmi b{color:var(--blue);font-size:15px}
+.savebtn{width:100%;margin-top:12px;background:var(--blue);color:#fff;border:none;border-radius:14px;padding:13px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit}
+.savebtn:active{opacity:.85}
+.b-msg{margin-top:8px;font-size:13px;color:var(--green);text-align:center;min-height:18px}
+.b-row{padding:10px 0;border-bottom:1px solid #F2F2F7;font-size:13.5px}
+.b-row:last-child{border-bottom:none}
+.b-date{font-weight:700;font-size:14px}
+.b-vals{color:var(--sub);margin-top:4px;line-height:1.9}
+.b-vals b{color:var(--text)}
+.b-empty{font-size:13px;color:var(--sub);text-align:center;padding:8px 0}
 footer{text-align:center;color:var(--sub);font-size:11px;padding:16px 24px 8px;line-height:1.8}
 footer a{color:var(--sub)}
 .sec-t{margin:24px 20px 0;font-size:18px;font-weight:800}
@@ -115,6 +124,19 @@ footer a{color:var(--sub)}
   <div class="p-row"><span>身高</span><span><input id="p-h" type="number" inputmode="decimal" min="0" placeholder="--"><em>cm</em></span></div>
   <div class="p-row"><span>体重</span><span><input id="p-w" type="number" inputmode="decimal" min="0" placeholder="--"><em>kg</em></span></div>
   <div class="p-bmi" id="p-bmi">填写身高体重查看 BMI</div>
+</div>
+
+<div class="card">
+  <h3>📏 身体记录</h3>
+  <div class="sub">每周测一次，固定时间（如晨起空腹）更准 · 变化对比以第一次记录为准</div>
+  <div class="p-row"><span>体重</span><span><input id="b-w" type="number" inputmode="decimal" min="0" placeholder="--"><em>kg</em></span></div>
+  <div class="p-row"><span>腰围</span><span><input id="b-waist" type="number" inputmode="decimal" min="0" placeholder="--"><em>cm</em></span></div>
+  <div class="p-row"><span>胸围</span><span><input id="b-chest" type="number" inputmode="decimal" min="0" placeholder="--"><em>cm</em></span></div>
+  <div class="p-row"><span>上臂围（左）</span><span><input id="b-arm" type="number" inputmode="decimal" min="0" placeholder="--"><em>cm</em></span></div>
+  <div class="p-row"><span>大腿围（左）</span><span><input id="b-thigh" type="number" inputmode="decimal" min="0" placeholder="--"><em>cm</em></span></div>
+  <button class="savebtn" id="b-save">保存本次记录</button>
+  <div class="b-msg" id="b-msg"></div>
+  <div id="b-list"></div>
 </div>
 
 <div class="notes">
@@ -234,6 +256,48 @@ if(store.profile&&store.profile.w){document.getElementById("p-w").value=store.pr
 document.getElementById("p-h").addEventListener("input",bmi);
 document.getElementById("p-w").addEventListener("input",bmi);
 bmi();
+// ---- 身体记录（体重/围度，按日期留存，变化对比第一次） ----
+function numv(id){var v=parseFloat(document.getElementById(id).value);return (isFinite(v)&&v>0)?v:null;}
+if(!store.bodylogs)store.bodylogs=[];
+var BNAMES={w:["体重","kg"],waist:["腰围","cm"],chest:["胸围","cm"],arm:["上臂围","cm"],thigh:["大腿围","cm"]};
+var BIDS={w:"b-w",waist:"b-waist",chest:"b-chest",arm:"b-arm",thigh:"b-thigh"};
+if(store.profile&&store.profile.w&&!document.getElementById("b-w").value){document.getElementById("b-w").value=store.profile.w;}
+function mdstr(s){return parseInt(s.slice(5,7),10)+"月"+parseInt(s.slice(8,10),10)+"日";}
+function fmtDelta(d){return d===null?"":"（"+(d>0?"+":"")+d.toFixed(1)+"）";}
+function renderBody(){
+  var list=document.getElementById("b-list");list.innerHTML="";
+  var logs=store.bodylogs.slice().sort(function(a,b){return a.d<b.d?-1:(a.d>b.d?1:0);});
+  if(logs.length===0){list.innerHTML='<div class="b-empty">还没有记录，填好上面的数据点「保存本次记录」</div>';return;}
+  var first={};
+  logs.forEach(function(e){Object.keys(BNAMES).forEach(function(k){if(!first[k]&&e[k]!==null&&e[k]!==undefined)first[k]={v:e[k],d:e.d};});});
+  logs.slice(-12).reverse().forEach(function(e){
+    var parts=[];
+    Object.keys(BNAMES).forEach(function(k){
+      var v=e[k];
+      if(v!==null&&v!==undefined){
+        var d=null;
+        if(first[k]&&e.d>first[k].d)d=v-first[k].v;
+        parts.push("<b>"+BNAMES[k][0]+" "+v+BNAMES[k][1]+"</b>"+fmtDelta(d));
+      }
+    });
+    var row=document.createElement("div");row.className="b-row";
+    row.innerHTML='<div class="b-date">'+mdstr(e.d)+'</div><div class="b-vals">'+parts.join("　")+'</div>';
+    list.appendChild(row);
+  });
+}
+document.getElementById("b-save").onclick=function(){
+  var e={d:dstr(today)},msg=document.getElementById("b-msg");
+  Object.keys(BIDS).forEach(function(k){e[k]=numv(BIDS[k]);});
+  var any=Object.keys(BNAMES).some(function(k){return e[k]!==null;});
+  if(!any){msg.textContent="至少填一项再保存";return;}
+  var i=store.bodylogs.findIndex(function(x){return x.d===e.d;});
+  if(i>=0){store.bodylogs[i]=e;msg.textContent="已更新今日记录";}
+  else{store.bodylogs.push(e);msg.textContent="已保存 "+mdstr(e.d)+" 的记录";}
+  if(e.w!==null){store.profile=store.profile||{};store.profile.w=e.w;
+    document.getElementById("p-w").value=e.w;bmi();}
+  save();renderBody();
+};
+renderBody();
 refresh();
 }catch(e){}
 })();
